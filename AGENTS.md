@@ -8,7 +8,9 @@ The extension automatically detects and clicks "Skip" buttons (Intro, Recap, Cre
 ### Core Architecture
 - **Content Script (`content/content.js`)**: The heart of the extension. It observes the DOM for changes, identifies skip buttons, and manages the auto-skip timers and UI.
 - **Popup (`popup/`)**: A standard browser extension popup for user settings.
-- **Storage**: Uses `chrome.storage.local` to persist user preferences (enabled states and delay timers).
+- **Storage**: Uses `storage.local` to persist user preferences (enabled states and delay timers).
+- **Cross-browser API**: Both scripts define `api` (`browser` in Safari/Firefox, `chrome` in Chrome) and use the promise form of extension APIs. Do not call `chrome.*` directly or pass callbacks.
+- **Safari**: `scripts/build-safari.sh` stages the extension files into `dist/` and runs `safari-web-extension-converter` to generate an Xcode project in `safari/` (both git-ignored). macOS + Xcode only.
 
 ### Technical Details for Agents
 

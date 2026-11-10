@@ -30,6 +30,17 @@ Automatically skip recap, intro, and credits on Crunchyroll.
 3. Click "Load Temporary Add-on...".
 4. Select the `manifest.json` file in the extension folder.
 
+### Safari (macOS / iOS / iPadOS)
+Safari extensions have to be wrapped in a small native app, so this needs a Mac with Xcode installed.
+
+1. Clone this repository and run `npm run build:safari` (add `-- --macos-only` to skip the iOS targets). This creates an Xcode project in `safari/`.
+2. Open the generated `.xcodeproj`, select your development team under *Signing & Capabilities* for each target, and press Run.
+3. In Safari, open *Settings → Extensions*, enable **Crunchyroll Auto Skipper**, and allow it on `crunchyroll.com` ("Always Allow on This Website"). The extension cannot see the player until that access is granted.
+
+To run without an Apple developer account, enable *Settings → Developer → Allow unsigned extensions* in Safari (shown once "Show features for web developers" is on under *Advanced*). Safari turns this off again each time it quits.
+
+Set `BUNDLE_ID=com.yourname.crunchyroll-auto-skipper` when running the build to use your own bundle identifier.
+
 ## Usage
 
 Click on the extension icon in your browser toolbar to open the settings popup. From there, you can:

@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "zip -r crunchyroll-auto-skipper.zip . -x \"*.git*\" \"*.iml\" \"node_modules/*\" \"package.json\" \"package-lock.json\" \"*.zip\" \".idea/*\" \".github/*\""
+    "build": "zip -r crunchyroll-auto-skipper.zip . -x \"*.git*\" \"*.iml\" \"node_modules/*\" \"package.json\" \"package-lock.json\" \"*.zip\" \".idea/*\" \".github/*\" \"scripts/*\" \"dist/*\" \"safari/*\"",
+    "build:safari": "bash scripts/build-safari.sh"
   },
   "keywords": [
     "crunchyroll",

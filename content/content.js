@@ -13,17 +13,21 @@ let userSettings = {
     creditsTimer: 0
 };
 
+// Safari and Firefox expose the promise-based `browser` namespace; Chrome exposes `chrome`.
+// The `.runtime` check guards against a page element with id="browser" shadowing the global.
+const api = (typeof browser !== 'undefined' && browser.runtime) ? browser : chrome;
+
 // Track active auto-skips to allow cancellation and prevent duplicates
 const activeSkips = new WeakMap();
 
 // Load settings initially and listen for changes
-chrome.storage.local.get(null, (result) => {
+api.storage.local.get(null).then((result) => {
     userSettings = {...userSettings, ...result};
     // Initial check after settings are loaded
     findSkipButtons(document.body).forEach(handleSkipButton);
 });
 
-chrome.storage.onChanged.addListener((changes) => {
+api.storage.onChanged.addListener((changes) => {
     for (let [key, {newValue}] of Object.entries(changes)) {
         userSettings[key] = newValue;
     }

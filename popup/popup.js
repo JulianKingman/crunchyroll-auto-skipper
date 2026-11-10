@@ -4,8 +4,11 @@ const options = [
   { id: 'skipCredits', timerId: 'creditsTimer' }
 ];
 
+// Safari and Firefox expose the promise-based `browser` namespace; Chrome exposes `chrome`.
+const api = (typeof browser !== 'undefined' && browser.runtime) ? browser : chrome;
+
 // Load settings
-chrome.storage.local.get(options.flatMap(o => [o.id, o.timerId]), (result) => {
+api.storage.local.get(options.flatMap(o => [o.id, o.timerId])).then((result) => {
   options.forEach(option => {
     document.getElementById(option.id).checked = result[option.id] !== false; // Default to true if not set
     document.getElementById(option.timerId).value = result[option.timerId] || 0;
@@ -13,7 +16,7 @@ chrome.storage.local.get(options.flatMap(o => [o.id, o.timerId]), (result) => {
 });
 
 // Set version number
-document.getElementById('version').textContent = `v${chrome.runtime.getManifest().version}`;
+document.getElementById('version').textContent = `v${api.runtime.getManifest().version}`;
 
 function showStatus() {
   const status = document.getElementById('status');
@@ -28,13 +31,22 @@ function showStatus() {
 // Save settings on change
 options.forEach(option => {
   document.getElementById(option.id).addEventListener('change', (e) => {
-    chrome.storage.local.set({ [option.id]: e.target.checked }, showStatus);
+    api.storage.local.set({ [option.id]: e.target.checked }).then(showStatus);
   });
 
   document.getElementById(option.timerId).addEventListener('input', (e) => {
     const value = parseInt(e.target.value, 10);
     if (!isNaN(value) && value >= 0) {
-      chrome.storage.local.set({ [option.timerId]: value }, showStatus);
+      api.storage.local.set({ [option.timerId]: value }).then(showStatus);
     }
+  });
+});
+
+// Safari does not reliably open target="_blank" links from an extension popup
+// (notably on iOS/iPadOS), so open them through the tabs API in every browser.
+document.querySelectorAll('a[target="_blank"]').forEach(link => {
+  link.addEventListener('click', (e) => {
+    e.preventDefault();
+    api.tabs.create({ url: link.href }).then(() => window.close());
   });
 });
