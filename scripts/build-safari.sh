@@ -35,6 +35,13 @@ xcrun safari-web-extension-converter "$STAGE" \
   --force \
   "$@"
 
+# Xcode refuses to build unless every extension's bundle identifier is prefixed with
+# the app's, so normalise them: apps get BUNDLE_ID, extensions get BUNDLE_ID.Extension.
+export BUNDLE_ID
+find safari -name project.pbxproj -exec perl -pi -e \
+  's/(PRODUCT_BUNDLE_IDENTIFIER = )"?[^";]*?(\.Extension)?"?;/$1 . "\"$ENV{BUNDLE_ID}" . ($2 ? ".Extension" : "") . "\";"/ie' {} +
+
 echo
+echo "Bundle identifiers: $BUNDLE_ID (app), $BUNDLE_ID.Extension (extension)"
 echo "Xcode project created in ./safari"
 echo "Open it with: open \"safari/Crunchyroll Auto Skipper/Crunchyroll Auto Skipper.xcodeproj\""
