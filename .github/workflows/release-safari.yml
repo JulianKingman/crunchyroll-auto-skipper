@@ -1,0 +1,120 @@
+name: Release Safari App
+
+# Builds the Safari wrapper app, signs it with a Developer ID certificate,
+# notarizes it with Apple and (optionally) attaches it to an existing release.
+#
+# Required repository secrets:
+#   MACOS_CERTIFICATE_P12        base64 of the exported "Developer ID Application" .p12
+#   MACOS_CERTIFICATE_PASSWORD   password chosen when exporting the .p12
+#   APPLE_ID                     Apple ID email used for notarization
+#   APPLE_APP_SPECIFIC_PASSWORD  app-specific password for that Apple ID
+#   APPLE_TEAM_ID                10-character Apple Developer team ID
+# Required repository variable:
+#   SAFARI_BUNDLE_ID             e.g. com.yourname.crunchyroll-auto-skipper
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing release tag to attach the app to (e.g. v0.0.8). Leave empty to only produce a workflow artifact.'
+        required: false
+        default: ''
+
+jobs:
+  safari:
+    runs-on: macos-15
+    permissions:
+      contents: write
+    env:
+      BUNDLE_ID: ${{ vars.SAFARI_BUNDLE_ID }}
+      TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Check configuration
+        env:
+          P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+        run: |
+          if [ -z "$BUNDLE_ID" ] || [ -z "$TEAM_ID" ] || [ -z "$P12" ]; then
+            echo "::error::Set the SAFARI_BUNDLE_ID variable and the signing secrets listed at the top of this workflow."
+            exit 1
+          fi
+
+      - name: Import signing certificate
+        env:
+          P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          P12_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          echo "$P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/cert.p12" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
+          security list-keychain -d user -s "$KEYCHAIN"
+          rm "$RUNNER_TEMP/cert.p12"
+          security find-identity -v -p codesigning "$KEYCHAIN"
+
+      - name: Generate Xcode project
+        run: bash scripts/build-safari.sh --macos-only
+
+      - name: Build and sign
+        run: |
+          VERSION="$(node -p "require('./manifest.json').version")"
+          PROJECT="$(find safari -name '*.xcodeproj' -maxdepth 3 | head -n 1)"
+          SCHEME="$(xcodebuild -list -json -project "$PROJECT" | jq -r '.project.schemes[0]')"
+          echo "Building scheme '$SCHEME' from '$PROJECT' at version $VERSION"
+          xcodebuild build \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -derivedDataPath build \
+            MARKETING_VERSION="$VERSION" \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Developer ID Application" \
+            DEVELOPMENT_TEAM="$TEAM_ID" \
+            PROVISIONING_PROFILE_SPECIFIER="" \
+            ENABLE_HARDENED_RUNTIME=YES \
+            CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO \
+            OTHER_CODE_SIGN_FLAGS="--timestamp"
+          APP="$(find build/Build/Products/Release -maxdepth 1 -name '*.app' | head -n 1)"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          echo "APP=$APP" >> "$GITHUB_ENV"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Notarize and staple
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: |
+          ditto -c -k --keepParent "$APP" "$RUNNER_TEMP/notarize.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" \
+            --apple-id "$APPLE_ID" --team-id "$TEAM_ID" --password "$APPLE_PASSWORD" \
+            --wait --output-format json | tee "$RUNNER_TEMP/notary.json"
+          if [ "$(jq -r .status "$RUNNER_TEMP/notary.json")" != "Accepted" ]; then
+            xcrun notarytool log "$(jq -r .id "$RUNNER_TEMP/notary.json")" \
+              --apple-id "$APPLE_ID" --team-id "$TEAM_ID" --password "$APPLE_PASSWORD" || true
+            echo "::error::Notarization was not accepted."
+            exit 1
+          fi
+          xcrun stapler staple "$APP"
+          ZIP="crunchyroll-auto-skipper-safari-v$VERSION.zip"
+          ditto -c -k --keepParent "$APP" "$ZIP"
+          echo "ZIP=$ZIP" >> "$GITHUB_ENV"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: crunchyroll-auto-skipper-safari
+          path: ${{ env.ZIP }}
+
+      - name: Attach to release
+        if: ${{ inputs.tag != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ inputs.tag }}" "$ZIP" --clobber

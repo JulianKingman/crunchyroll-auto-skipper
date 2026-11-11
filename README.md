@@ -41,6 +41,9 @@ To run without an Apple developer account, enable *Settings → Developer → Al
 
 Set `BUNDLE_ID=com.yourname.crunchyroll-auto-skipper` when running the build to use your own bundle identifier.
 
+#### Publishing a signed Safari build
+The **Release Safari App** workflow (`.github/workflows/release-safari.yml`) builds the app on a macOS runner, signs it with a Developer ID certificate, notarizes it and can attach the zip to an existing release. It needs a paid Apple Developer account; the secrets and variable it expects are listed at the top of the workflow file.
+
 ## Usage
 
 Click on the extension icon in your browser toolbar to open the settings popup. From there, you can:
